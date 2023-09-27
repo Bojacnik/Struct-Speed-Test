@@ -1,36 +1,32 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\czfai\\Source\\Repos\\TestingSpeed\\TestingSpeed.csproj": {}
+    "C:\\Users\\bojac\\Projects\\Struct-Speed-Test\\TestingSpeed\\TestingSpeed.csproj": {}
   },
   "projects": {
-    "C:\\Users\\czfai\\Source\\Repos\\TestingSpeed\\TestingSpeed.csproj": {
+    "C:\\Users\\bojac\\Projects\\Struct-Speed-Test\\TestingSpeed\\TestingSpeed.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\czfai\\Source\\Repos\\TestingSpeed\\TestingSpeed.csproj",
+        "projectUniqueName": "C:\\Users\\bojac\\Projects\\Struct-Speed-Test\\TestingSpeed\\TestingSpeed.csproj",
         "projectName": "TestingSpeed",
-        "projectPath": "C:\\Users\\czfai\\Source\\Repos\\TestingSpeed\\TestingSpeed.csproj",
-        "packagesPath": "C:\\Users\\czfai\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\czfai\\Source\\Repos\\TestingSpeed\\obj\\",
+        "projectPath": "C:\\Users\\bojac\\Projects\\Struct-Speed-Test\\TestingSpeed\\TestingSpeed.csproj",
+        "packagesPath": "C:\\Users\\bojac\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\bojac\\Projects\\Struct-Speed-Test\\TestingSpeed\\obj\\",
         "projectStyle": "PackageReference",
-        "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
-        ],
         "configFilePaths": [
-          "C:\\Users\\czfai\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Users\\bojac\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
-          "net5.0"
+          "net7.0"
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
-          "net5.0": {
-            "targetAlias": "net5.0",
+          "net7.0": {
+            "targetAlias": "net7.0",
             "projectReferences": {}
           }
         },
@@ -41,38 +37,25 @@
         }
       },
       "frameworks": {
-        "net5.0": {
-          "targetAlias": "net5.0",
+        "net7.0": {
+          "targetAlias": "net7.0",
           "imports": [
             "net461",
             "net462",
             "net47",
             "net471",
             "net472",
-            "net48"
+            "net48",
+            "net481"
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "downloadDependencies": [
-            {
-              "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[5.0.0, 5.0.0]"
-            },
-            {
-              "name": "Microsoft.NETCore.App.Ref",
-              "version": "[5.0.0, 5.0.0]"
-            },
-            {
-              "name": "Microsoft.WindowsDesktop.App.Ref",
-              "version": "[5.0.0, 5.0.0]"
-            }
-          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\5.0.401\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\7.0.400\\RuntimeIdentifierGraph.json"
         }
       }
     }

@@ -1,12 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "zCVUd85d968b3g81mLphhya7HIbjWJznMlX+AFuIMk5AurbEFxqCVG6vfPFh3WyirQpFFoBVTSP/gPpIayPhkw==",
+  "dgSpecHash": "gbcoGbqLV2oAvtgzY2uqWc2KRqhJt1SyvZBmyqzeispDWIynWcT/8PaHIfmTjPVdPYMJjKLRi+K+S8g5DW4LZQ==",
   "success": true,
-  "projectFilePath": "C:\\Users\\czfai\\Source\\Repos\\TestingSpeed\\TestingSpeed.csproj",
-  "expectedPackageFiles": [
-    "C:\\Users\\czfai\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\5.0.0\\microsoft.aspnetcore.app.ref.5.0.0.nupkg.sha512",
-    "C:\\Users\\czfai\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\5.0.0\\microsoft.windowsdesktop.app.ref.5.0.0.nupkg.sha512",
-    "C:\\Users\\czfai\\.nuget\\packages\\microsoft.netcore.app.ref\\5.0.0\\microsoft.netcore.app.ref.5.0.0.nupkg.sha512"
-  ],
+  "projectFilePath": "C:\\Users\\bojac\\Projects\\Struct-Speed-Test\\TestingSpeed\\TestingSpeed.csproj",
+  "expectedPackageFiles": [],
   "logs": []
 }
