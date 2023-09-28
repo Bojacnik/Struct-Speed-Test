@@ -1,2 +1,2 @@
 # Struct-Speed-Test
-A simple generation of structs that I compared against Java classes.
+Creation time of structs that I used to compare against the creation of Java classes.
