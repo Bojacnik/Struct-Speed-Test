@@ -62,7 +62,7 @@ For each case, both programs:
 ### Why the numbers look like this
 
 - **Creation:** a C# struct array is one contiguous block, so "creating" an element is just writing 16 bytes. Every Java `new Data(...)` is a heap object (header + fields) plus a pointer in the array, and the GC has to clean it up later.
-- **Built-in GUID:** on Linux, .NET's `Guid.NewGuid()` asks the OS for random bytes on every call, while Java's `SecureRandom` buffers. If you just need random 128-bit values, the bulk crypto RNG case is ~125× faster in C#. Because the struct array is raw memory, it can be filled with a single `RandomNumberGenerator.Fill` call.
+- **Built-in GUID:** on Linux, .NET's `Guid.NewGuid()` asks the OS for random bytes on every call, while Java's `SecureRandom` buffers. If you just need random 128-bit values, the bulk crypto RNG case is over 100× faster in C#. Because the struct array is raw memory, it can be filled with a single `RandomNumberGenerator.Fill` call.
 - **Comparison:** both scalar loops are around half a nanosecond per element. Because structs are packed next to each other in memory, C# can also compare them with SIMD; Java's object array is an array of pointers, so it can't.
 
 Numbers depend on the CPU, OS and runtime versions, so run it on your own machine.
