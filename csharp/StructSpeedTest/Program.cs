@@ -6,7 +6,7 @@ namespace StructSpeedTest;
 
 /// <summary>
 /// Quick C# vs Java race. The Java counterpart is java/src/main/java/structspeed/Main.java.
-/// Usage: StructSpeedTest [--sizes 50000,1000000,10000000] [--csv results/csharp.csv] [--filter text] [--quick]
+/// Usage: StructSpeedTest [--sizes 50000,1000000,10000000] [--csv results/csharp.csv] [--filter text] [--quick] [--verify]
 /// </summary>
 internal static class Program
 {
@@ -26,10 +26,17 @@ internal static class Program
                 case "--csv": csvPath = args[++i]; break;
                 case "--filter": filter = args[++i]; break;
                 case "--quick": quick = true; break;
+                case "--verify": return Verification.Run();
                 default:
-                    Console.Error.WriteLine($"Unknown argument '{args[i]}'. Usage: [--sizes a,b,c] [--csv path] [--filter text] [--quick]");
+                    Console.Error.WriteLine($"Unknown argument '{args[i]}'. Usage: [--sizes a,b,c] [--csv path] [--filter text] [--quick] [--verify]");
                     return 1;
             }
+        }
+
+        if (sizes.Any(size => size < 1))
+        {
+            Console.Error.WriteLine("Sizes must be at least 1.");
+            return 1;
         }
 
         var runtime = $".NET {Environment.Version}{(RuntimeFeature.IsDynamicCodeSupported ? "" : " NativeAOT")}";
@@ -41,6 +48,8 @@ internal static class Program
         {
             var data = new Data[size];
             var sortWork = new Data[size];
+            var radixTemp = new Data[size];
+            var radixCounts = new int[HandOptimized.RadixCountsLength];
             harness.PrintSizeHeader(size);
 
             void Case(string name, Func<long> body)
@@ -61,6 +70,8 @@ internal static class Program
             Case("hashset", () => Workloads.BuildHashSet(data));
             Case("parallel.equals", () => Workloads.ParallelCountMatches(data));
             Case("parallel.equals.simd", () => Workloads.ParallelCountMatchesSimd(data));
+            Case("handopt.sort.radix", () => HandOptimized.CopyAndRadixSort(data, sortWork, radixTemp, radixCounts));
+            Case("handopt.hashset.open", () => HandOptimized.BuildOpenHashSet(data));
             Case("parallel.create.prng", () => Workloads.ParallelCreateRandom(data));
         }
 

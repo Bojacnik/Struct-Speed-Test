@@ -16,6 +16,8 @@ public class StructBenchmarks
     private Data[] _data = [];
     private Data[] _random = [];
     private Data[] _sortWork = [];
+    private Data[] _radixTemp = [];
+    private int[] _radixCounts = [];
 
     [GlobalSetup]
     public void Setup()
@@ -23,6 +25,8 @@ public class StructBenchmarks
         _data = new Data[N];
         _random = new Data[N];
         _sortWork = new Data[N];
+        _radixTemp = new Data[N];
+        _radixCounts = new int[HandOptimized.RadixCountsLength];
         Workloads.CreateRandom(_random);
     }
 
@@ -34,6 +38,8 @@ public class StructBenchmarks
     [Benchmark] public long EqualsSimd() => Workloads.CountMatchesSimd(_random);
     [Benchmark] public long Sort() => Workloads.CopyAndSort(_random, _sortWork);
     [Benchmark] public long HashSet() => Workloads.BuildHashSet(_random);
+    [Benchmark] public long HandOptSortRadix() => HandOptimized.CopyAndRadixSort(_random, _sortWork, _radixTemp, _radixCounts);
+    [Benchmark] public long HandOptHashSetOpen() => HandOptimized.BuildOpenHashSet(_random);
     [Benchmark] public long ParallelEquals() => Workloads.ParallelCountMatches(_random);
     [Benchmark] public long ParallelEqualsSimd() => Workloads.ParallelCountMatchesSimd(_random);
     [Benchmark] public long ParallelCreatePrng() => Workloads.ParallelCreateRandom(_data);

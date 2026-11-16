@@ -144,7 +144,8 @@ public final class Harness {
     }
 
     private void appendCsv(int size, String name, Double... values) {
-        csv.append(lang).append(',').append(runtime).append(',').append(size).append(',').append(name);
+        // The CSV is not quoted, so keep commas out of the free-text runtime label.
+        csv.append(lang).append(',').append(runtime.replace(',', ';')).append(',').append(size).append(',').append(name);
         for (Double value : values) {
             csv.append(',');
             if (value != null) csv.append(String.format(Locale.ROOT, "%.6g", value));

@@ -12,6 +12,7 @@ mkdir -p results native
 echo "== C# NativeAOT (targeting this machine's CPU, so AVX2/AVX-512 are available)"
 dotnet publish csharp/StructSpeedTest/StructSpeedTest.csproj -c Release -r linux-x64 -nologo -v quiet \
   -p:PublishAot=true -p:IlcInstructionSet=native -o native/csharp >/dev/null
+native/csharp/StructSpeedTest --verify
 native/csharp/StructSpeedTest --csv results/csharp-aot.csv "$@"
 files=(results/csharp-aot.csv)
 
@@ -21,6 +22,7 @@ if command -v native-image >/dev/null 2>&1; then
   require mvn
   (cd java && mvn -q -B package -DskipTests)
   native-image -O3 -march=native --no-fallback -cp java/target/benchmarks.jar -o native/java-struct-speed structspeed.Main >/dev/null
+  native/java-struct-speed --verify
   native/java-struct-speed --csv results/java-native.csv "$@"
   files+=(results/java-native.csv)
 else

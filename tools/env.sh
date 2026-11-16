@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared settings for the run scripts (sourced, not executed).
 # JVM flags for every Java run:
 # - fixed 4 GB heap (10M-element HashSets need it)
@@ -26,4 +27,5 @@ if [ "${java_feature%%.*}" -lt 25 ] 2>/dev/null; then
 fi
 
 # Maven compiles with JAVA_HOME, which can point at an older JDK than the java on PATH: use the same JDK for both.
-export JAVA_HOME="$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.home/ {print $2}')"
+JAVA_HOME="$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.home/ {print $2}')"
+export JAVA_HOME

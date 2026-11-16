@@ -45,6 +45,11 @@ jobs:
           FULL: ${{ inputs.full }}
         run: |
           if [ "$FULL" = "true" ]; then ./race.sh; else ./race.sh --quick; fi
+      - name: Correctness checks on the other SIMD paths
+        run: |
+          # race.sh already verified the path this CPU uses; force the AVX2 path and the plain fallback too.
+          DOTNET_EnableAVX512=0 dotnet csharp/StructSpeedTest/bin/Release/net11.0/StructSpeedTest.dll --verify
+          DOTNET_EnableAVX512=0 DOTNET_EnableAVX2=0 DOTNET_EnableAVX=0 dotnet csharp/StructSpeedTest/bin/Release/net11.0/StructSpeedTest.dll --verify
       - name: Publish summary
         if: always()
         run: |

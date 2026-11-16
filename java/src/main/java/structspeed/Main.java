@@ -7,7 +7,7 @@ import java.util.function.LongSupplier;
 
 /**
  * Quick C# vs Java race. The C# counterpart is csharp/StructSpeedTest/Program.cs.
- * Usage: java -cp target/benchmarks.jar structspeed.Main [--sizes 50000,1000000,10000000] [--csv path] [--filter text] [--quick] [--label text]
+ * Usage: java -cp target/benchmarks.jar structspeed.Main [--sizes 50000,1000000,10000000] [--csv path] [--filter text] [--quick] [--label text] [--verify]
  */
 public final class Main {
     private static final int[] DEFAULT_SIZES = {50_000, 1_000_000, 10_000_000};
@@ -26,11 +26,17 @@ public final class Main {
                 case "--filter" -> filter = args[++i].toLowerCase(Locale.ROOT);
                 case "--quick" -> quick = true;
                 case "--label" -> label = args[++i];
+                case "--verify" -> System.exit(Verification.run());
                 default -> {
-                    System.err.println("Unknown argument '" + args[i] + "'. Usage: [--sizes a,b,c] [--csv path] [--filter text] [--quick] [--label text]");
+                    System.err.println("Unknown argument '" + args[i] + "'. Usage: [--sizes a,b,c] [--csv path] [--filter text] [--quick] [--label text] [--verify]");
                     System.exit(1);
                 }
             }
+        }
+
+        if (Arrays.stream(sizes).anyMatch(size -> size < 1)) {
+            System.err.println("Sizes must be at least 1.");
+            System.exit(1);
         }
 
         String runtime = "Java " + Runtime.version().feature() + " (" + System.getProperty("java.vm.name") + ")"
@@ -42,6 +48,8 @@ public final class Main {
         for (int size : sizes) {
             Data[] data = new Data[size];
             Data[] sortWork = new Data[size];
+            Data[] radixTemp = new Data[size];
+            int[] radixCounts = new int[HandOptimized.RADIX_COUNTS_LENGTH];
             byte[] randomBytes = new byte[size * 16];
             harness.printSizeHeader(size);
             final String f = filter;
@@ -60,6 +68,8 @@ public final class Main {
             run.accept("sort", () -> Workloads.copyAndSort(data, sortWork));
             run.accept("hashset", () -> Workloads.buildHashSet(data));
             run.accept("parallel.equals", () -> Workloads.parallelCountMatches(data));
+            run.accept("handopt.sort.radix", () -> HandOptimized.copyAndRadixSort(data, sortWork, radixTemp, radixCounts));
+            run.accept("handopt.hashset.open", () -> HandOptimized.buildOpenHashSet(data));
             run.accept("parallel.create.prng", () -> Workloads.parallelCreateRandom(data));
         }
 

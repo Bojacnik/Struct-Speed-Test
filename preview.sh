@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# JAVA_*_OPTS are flag lists and are split into separate arguments on purpose.
+# shellcheck disable=SC2086
 # PREVIEW races - Java features that are not stable yet. Kept out of the main race on purpose.
 #   ./preview.sh vector     Vector API (jdk.incubator.vector), JDK 25+ java on PATH
 #   ./preview.sh valhalla   Value objects (JEP 401), needs VALHALLA_HOME pointing at a Valhalla early-access JDK

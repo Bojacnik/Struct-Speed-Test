@@ -11,20 +11,23 @@ Java features that are still incubating or early access are raced separately and
 ```
 csharp/
   StructSpeedTest.Core/        Data.cs (the struct) + Workloads.cs (every benchmark case)
-  StructSpeedTest/             quick runner (Harness.cs, Program.cs) - also builds with NativeAOT
+                               + HandOptimized.cs (radix sort, open-addressing hash set)
+  StructSpeedTest/             quick runner (Harness.cs, Program.cs, Verification.cs) - also builds with NativeAOT
   StructSpeedTest.Benchmarks/  the same cases under BenchmarkDotNet
 java/                          Maven project, JDK 25
-  src/main/java/structspeed/   Data.java (record) + Workloads.java + Harness.java + Main.java
+  src/main/java/structspeed/   Data.java (record) + Workloads.java + HandOptimized.java
+                               + Harness.java + Main.java + Verification.java
   .../structspeed/jmh/         the same cases under JMH
 java-preview/                  PREVIEW ONLY - not part of the main race
   vector/                      Vector API (jdk.incubator.vector, incubating)
   valhalla/                    value objects (Project Valhalla, JEP 401, early access)
 tools/compare.py               merges result CSVs into a Markdown report
+tools/env.sh                   shared settings for the scripts (JVM flags, tool checks)
 .github/workflows/race.yml     runs everything on GitHub Actions
 ```
 
-`Workloads.cs` and `Workloads.java` mirror each other one to one, and both harnesses use identical timing rules,
-so every row compares the same work.
+`Workloads.*`, `HandOptimized.*` and `Verification.*` mirror each other one to one between the languages, and both
+harnesses use identical timing rules, so every row compares the same work.
 
 ## Running
 
@@ -32,20 +35,26 @@ Requires the **.NET 11 SDK**, **JDK 25+**, **Maven** and **Python 3**.
 
 | Script | What it runs | Time |
 |---|---|---|
-| `./race.sh` | Main race: C# (JIT) vs Java (HotSpot JIT) at 50k, 1M and 10M elements | ~10 min |
+| `./race.sh` | Main race: C# (JIT) vs Java (HotSpot JIT, default and tuned GC) at 50k, 1M and 10M elements | ~15 min |
 | `./race.sh --quick --sizes 50000` | Smoke test | ~1 min |
 | `./native.sh` | Ahead-of-time compiled: .NET NativeAOT vs GraalVM `native-image` (needs clang + zlib headers; GraalVM 25 for the Java side) | ~10 min |
 | `./bench.sh [filter]` | Publication-grade: BenchmarkDotNet + JMH (with `-prof gc`) | 30+ min |
 | `./preview.sh vector` | **Preview:** Java Vector API | ~1 min |
 | `VALHALLA_HOME=... ./preview.sh valhalla` | **Preview:** Java value objects ([Valhalla EA JDK](https://jdk.java.net/valhalla/)) | ~5 min |
 
-The runners also take `--filter text` (run matching cases only) and `--csv path`.
+The runners also take `--filter text` (run matching cases only), `--csv path`, and `--verify` (correctness checks only,
+no timing; takes a second).
 Results land in `results/` (`summary.md` is the side-by-side report).
 
 On GitHub, the **Race** workflow runs the main, native and preview races on every push (quick mode) and puts the tables
-in the run summary. Start it manually with **full** for all sizes, or **standard-tools** for BenchmarkDotNet + JMH.
+in the run summary. It also runs the correctness checks with AVX-512 and with all of AVX switched off, so every SIMD
+code path is tested whatever CPU the runner has. Start it manually with **full** for all sizes, or **standard-tools** for BenchmarkDotNet + JMH.
 
 ## How it measures
+
+Before any timing, `race.sh` and `native.sh` run the **correctness checks** (`Verification.cs` / `Verification.java`):
+every optimized path (SIMD, parallel, radix sort, open-addressing hash set) is compared with the plain reference
+version on an awkward size with planted duplicates. A wrong result stops the run.
 
 Both harnesses (`Harness.cs` / `Harness.java`) follow the same rules:
 
@@ -81,6 +90,8 @@ Java runs twice in the main race (flags in `tools/env.sh`):
 | `parallel.equals` | `equals.scalar` split over all cores (`Parallel.For` / parallel `IntStream`, same chunking) |
 | `parallel.equals.simd` | C# only: `equals.simd` split over all cores. At large sizes one core can't read memory fast enough to keep SIMD busy |
 | `parallel.create.prng` | `create.prng` split over all cores |
+| `handopt.sort.radix` | **Hand-optimized:** LSD radix sort, 16-bit digits, 8 passes, skipping passes where every element has the same digit. Same order as `sort`. C# moves the 16-byte structs; Java moves references and has to dereference each one to read its key |
+| `handopt.hashset.open` | **Hand-optimized:** open-addressing hash set (linear probing, power-of-two table at most half full, Fibonacci hashing). Both store the 16 bytes inline in flat arrays, so probing never follows a reference |
 | `memory.footprint` | Heap bytes per element of a filled array |
 
 ## Results

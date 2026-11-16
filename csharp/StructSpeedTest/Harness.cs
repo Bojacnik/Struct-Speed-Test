@@ -102,7 +102,8 @@ public sealed class Harness(string runtime, bool quick)
 
     private void AppendCsv(int size, string name, params double?[] values)
     {
-        _csv.Append($"csharp,{runtime},{size},{name}");
+        // The CSV is not quoted, so keep commas out of the free-text runtime label.
+        _csv.Append($"csharp,{runtime.Replace(',', ';')},{size},{name}");
         foreach (var value in values)
             _csv.Append(',').Append(value?.ToString("G6", CultureInfo.InvariantCulture));
         _csv.Append('\n');

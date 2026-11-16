@@ -13,6 +13,7 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import structspeed.Data;
+import structspeed.HandOptimized;
 import structspeed.Workloads;
 
 /**
@@ -34,6 +35,8 @@ public class StructBenchmarks {
     private Data[] data;
     private Data[] random;
     private Data[] sortWork;
+    private Data[] radixTemp;
+    private int[] radixCounts;
     private byte[] randomBytes;
 
     @Setup
@@ -41,6 +44,8 @@ public class StructBenchmarks {
         data = new Data[n];
         random = new Data[n];
         sortWork = new Data[n];
+        radixTemp = new Data[n];
+        radixCounts = new int[HandOptimized.RADIX_COUNTS_LENGTH];
         randomBytes = new byte[n * 16];
         Workloads.createRandom(random);
     }
@@ -52,6 +57,8 @@ public class StructBenchmarks {
     @Benchmark public long equalsScalar() { return Workloads.countMatches(random); }
     @Benchmark public long sort() { return Workloads.copyAndSort(random, sortWork); }
     @Benchmark public long hashSet() { return Workloads.buildHashSet(random); }
+    @Benchmark public long handOptSortRadix() { return HandOptimized.copyAndRadixSort(random, sortWork, radixTemp, radixCounts); }
+    @Benchmark public long handOptHashSetOpen() { return HandOptimized.buildOpenHashSet(random); }
     @Benchmark public long parallelEquals() { return Workloads.parallelCountMatches(random); }
     @Benchmark public long parallelCreatePrng() { return Workloads.parallelCreateRandom(data); }
 }

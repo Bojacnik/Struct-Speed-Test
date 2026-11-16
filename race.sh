@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# JAVA_*_OPTS are flag lists and are split into separate arguments on purpose.
+# shellcheck disable=SC2086
 # Main race: C# (.NET 11, JIT) vs Java (JDK 25, HotSpot) using stable features only.
 # Java runs twice: with the default settings (tools/env.sh JAVA_BENCH_OPTS) and with a tuned GC (JAVA_TUNED_OPTS).
 # Usage: ./race.sh [--quick] [--sizes 50000,1000000,10000000] [--filter text]
@@ -11,6 +13,11 @@ require dotnet mvn python3
 echo "== Building"
 dotnet build csharp/StructSpeedTest/StructSpeedTest.csproj -c Release -nologo -v quiet >/dev/null
 (cd java && mvn -q -B package -DskipTests)
+
+echo
+echo "== Correctness checks"
+dotnet csharp/StructSpeedTest/bin/Release/net11.0/StructSpeedTest.dll --verify
+java -cp java/target/benchmarks.jar structspeed.Main --verify
 
 mkdir -p results
 echo

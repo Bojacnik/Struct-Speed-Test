@@ -14,4 +14,5 @@ echo
 echo "== JMH"
 (cd java && mvn -q -B package -DskipTests)
 mkdir -p results/jmh
-java -jar java/target/benchmarks.jar "StructBenchmarks.*${filter}" -prof gc -rf json -rff results/jmh/results.json
+# (?i): JMH filters are case-sensitive regexes, and Java method names are camelCase (equalsScalar vs EqualsScalar).
+java -jar java/target/benchmarks.jar "(?i)StructBenchmarks.*${filter}" -prof gc -rf json -rff results/jmh/results.json
