@@ -675,4 +675,9 @@ fabric.properties
 # End of https://www.toptal.com/developers/gitignore/api/csharp,visualstudio,rider,visualstudiocode
 
 # Java build output
-java/out/
+java/target/
+
+# Benchmark output
+results/
+native/
+BenchmarkDotNet.Artifacts/

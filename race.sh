@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
-# Builds and runs the C# and Java benchmarks back to back.
-# Usage: ./race.sh [element-count]
+# Main race: C# (.NET 11, JIT) vs Java (JDK 25, HotSpot) using stable features only.
+# Usage: ./race.sh [--quick] [--sizes 50000,1000000,10000000] [--filter text]
+# Writes results/csharp.csv, results/java.csv and results/summary.md.
 set -euo pipefail
 cd "$(dirname "$0")"
-COUNT="${1:-50000}"
+source tools/env.sh
+require dotnet mvn python3
 
-echo "== Building =="
-dotnet build -c Release -nologo -v quiet TestingSpeed.csproj >/dev/null
-mkdir -p java/out
-javac -d java/out java/StructSpeedTest.java
+echo "== Building"
+dotnet build csharp/StructSpeedTest/StructSpeedTest.csproj -c Release -nologo -v quiet >/dev/null
+(cd java && mvn -q -B package -DskipTests)
+
+mkdir -p results
+echo
+echo "== C#"
+dotnet csharp/StructSpeedTest/bin/Release/net11.0/StructSpeedTest.dll --csv results/csharp.csv "$@"
 
 echo
-echo "== C# =="
-dotnet bin/Release/net11.0/TestingSpeed.dll "$COUNT"
+echo "== Java"
+java $JAVA_BENCH_OPTS -cp java/target/benchmarks.jar structspeed.Main --csv results/java.csv "$@"
 
+python3 tools/compare.py results/csharp.csv results/java.csv > results/summary.md
 echo
-echo "== Java =="
-java -XX:+UseParallelGC -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp java/out StructSpeedTest "$COUNT"
+echo "== Summary written to results/summary.md"
+cat results/summary.md

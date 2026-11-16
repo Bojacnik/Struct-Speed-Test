@@ -1,69 +1,107 @@
 # Struct-Speed-Test
 
-Measures how fast C# structs are created and compared, raced against the equivalent Java code.
+How fast are C# structs compared with Java objects? This repo races the same workloads in both languages:
+creating 16-byte values, comparing them, sorting them, hashing them, in parallel, and how much memory they take.
 
-- `Data.cs` – the struct: 16 bytes stored inline as two `ulong` fields (no `byte[]`, no heap allocation per instance).
-- `Program.cs` – the C# benchmark harness.
-- `java/StructSpeedTest.java` – the Java counterpart: same cases, same element count, same harness.
-- `race.sh` – builds and runs both back to back.
+The **main race uses stable features only**: .NET 11 / C# 15 against JDK 25 (the current Java LTS).
+Java features that are still incubating or early access are raced separately and clearly marked as **preview**.
+
+## Layout
+
+```
+csharp/
+  StructSpeedTest.Core/        Data.cs (the struct) + Workloads.cs (every benchmark case)
+  StructSpeedTest/             quick runner (Harness.cs, Program.cs) - also builds with NativeAOT
+  StructSpeedTest.Benchmarks/  the same cases under BenchmarkDotNet
+java/                          Maven project, JDK 25
+  src/main/java/structspeed/   Data.java (record) + Workloads.java + Harness.java + Main.java
+  .../structspeed/jmh/         the same cases under JMH
+java-preview/                  PREVIEW ONLY - not part of the main race
+  vector/                      Vector API (jdk.incubator.vector, incubating)
+  valhalla/                    value objects (Project Valhalla, JEP 401, early access)
+tools/compare.py               merges result CSVs into a Markdown report
+.github/workflows/race.yml     runs everything on GitHub Actions
+```
+
+`Workloads.cs` and `Workloads.java` mirror each other one to one, and both harnesses use identical timing rules,
+so every row compares the same work.
 
 ## Running
 
-Requires the .NET 11 SDK (C# 15) and JDK 21+.
+Requires the **.NET 11 SDK**, **JDK 25+**, **Maven** and **Python 3**.
 
-```bash
-./race.sh            # 50,000 elements (default)
-./race.sh 1000000    # custom element count
-```
+| Script | What it runs | Time |
+|---|---|---|
+| `./race.sh` | Main race: C# (JIT) vs Java (HotSpot JIT) at 50k, 1M and 10M elements | ~10 min |
+| `./race.sh --quick --sizes 50000` | Smoke test | ~1 min |
+| `./native.sh` | Ahead-of-time compiled: .NET NativeAOT vs GraalVM `native-image` (needs clang + zlib headers; GraalVM 25 for the Java side) | ~10 min |
+| `./bench.sh [filter]` | Publication-grade: BenchmarkDotNet + JMH (with `-prof gc`) | 30+ min |
+| `./preview.sh vector` | **Preview:** Java Vector API | ~1 min |
+| `VALHALLA_HOME=... ./preview.sh valhalla` | **Preview:** Java value objects ([Valhalla EA JDK](https://jdk.java.net/valhalla/)) | ~5 min |
 
-Or individually:
+The runners also take `--filter text` (run matching cases only) and `--csv path`.
+Results land in `results/` (`summary.md` is the side-by-side report).
 
-```bash
-dotnet run -c Release -- 50000
-javac -d java/out java/StructSpeedTest.java && java -XX:+UseParallelGC -Xms1g -Xmx1g -cp java/out StructSpeedTest 50000
-```
-
-Always use a Release build; Debug numbers are meaningless.
+On GitHub, the **Race** workflow runs the main, native and preview races on every push (quick mode) and puts the tables
+in the run summary. Start it manually with **full** for all sizes, or **standard-tools** for BenchmarkDotNet + JMH.
 
 ## How it measures
 
-For each case, both programs:
+Both harnesses (`Harness.cs` / `Harness.java`) follow the same rules:
 
-1. Warm up for at least 30 rounds **and** 1 second, so the JIT (RyuJIT tiered compilation + PGO / HotSpot C2) has produced fully optimized code.
-2. Time 50 rounds over the whole array and report the **median** and **best** round, plus nanoseconds per element.
-3. Add every result into a printed checksum, so the compiler can't remove the work as dead code.
+1. **Warm-up** until at least 1 s and 30 rounds have run (or 4 s and 3 rounds for slow cases), so the JIT has produced fully optimised code.
+2. **Measure** up to 50 rounds (at least 5, stopping after 3 s) and report the **median** round.
+3. Count **heap allocation**, **GC count** and **GC pause time** across the timed rounds.
+4. Add every result into a printed checksum so the compiler can't remove the work.
+5. **Memory footprint:** fill a 1M-element array, force full GCs, and divide the heap growth by the element count.
+
+The JVM runs with `-XX:+UseParallelGC -Xms4g -Xmx4g` (see `tools/env.sh`). Parallel GC is a throughput collector,
+the closest match to the non-concurrent workstation GC the C# side uses.
 
 ## Cases
 
-| Case | What it measures |
+| Case | What it does |
 |---|---|
-| Create zeroed | Filling the array with `new Data(0, 0)` |
-| Create from PRNG (SplitMix64) | Creating each element from a fast deterministic random generator (same algorithm in both languages) |
-| Create from `Guid.NewGuid()` / `UUID.randomUUID()` | Each language's built-in random GUID, one call per element |
-| Create from crypto RNG (bulk) | One call to the OS crypto RNG for all the bytes, then turned into elements |
-| Equals: first vs all | Compares element 0 against every element through the normal `Equals` |
-| Equals: first vs all (SIMD) | C# only: `Data.CountMatches` compares 2 (AVX2) or 4 (AVX-512) structs per CPU instruction |
+| `create.zeroed` | Fill the array with `new Data(0, 0)` |
+| `create.prng` | Create each element from a fast random generator (SplitMix64, same algorithm in both) |
+| `create.guid` | One built-in random GUID per element (`Guid.NewGuid()` / `UUID.randomUUID()`) |
+| `create.crypto-bulk` | One call to the OS crypto RNG for all bytes, then turn them into elements |
+| `equals.scalar` | Compare element 0 with every element through `Equals` |
+| `equals.simd` | C#: `Data.CountMatches` compares 2 (AVX2) or 4 (AVX-512) elements per instruction. Java: no stable API, see preview |
+| `sort` | Copy the unsorted array, then sort it (unsigned order by high half, then low half) |
+| `hashset` | Build a `HashSet` of all elements (both sides use the same hash function) |
+| `parallel.equals` | `equals.scalar` split over all cores (`Parallel.For` / parallel `IntStream`, same chunking) |
+| `parallel.create.prng` | `create.prng` split over all cores |
+| `memory.footprint` | Heap bytes per element of a filled array |
 
-## Sample results
+## Results
 
-50,000 elements, 4-core x64 Linux cloud VM, .NET 11.0 (C# 15) vs OpenJDK 21. Median ns per element:
+RESULTS_PLACEHOLDER
 
-| Case | C# | Java |
-|---|---:|---:|
-| Create zeroed | **0.34** | 3.98 |
-| Create from PRNG (SplitMix64) | **1.43** | 3.27 |
-| Create from built-in GUID | 265.46 | **166.52** |
-| Create from crypto RNG (bulk) | **2.30** | 115.47 |
-| Equals: first vs all | 0.55–0.78* | 0.54 |
-| Equals: first vs all (SIMD) | **0.24** | n/a |
+## Preview: Java features that aren't stable yet
 
-\* The scalar loop moves between ~0.55 and ~0.78 ns depending on where the JIT places the machine code (loop alignment), not on the code itself.
+These are **not** part of the main race. They show where Java is heading, not what you can ship today.
 
-### Why the numbers look like this
+### Vector API (incubator in JDK 25)
 
-- **Creation:** a C# struct array is one contiguous block, so "creating" an element is just writing 16 bytes. Every Java `new Data(...)` is a heap object (header + fields) plus a pointer in the array, and the GC has to clean it up later.
-- **Built-in GUID:** on Linux, .NET's `Guid.NewGuid()` asks the OS for random bytes on every call, while Java's `SecureRandom` buffers. If you just need random 128-bit values, the bulk crypto RNG case is over 100× faster in C#. Because the struct array is raw memory, it can be filled with a single `RandomNumberGenerator.Fill` call.
-- **Comparison:** both scalar loops are around half a nanosecond per element. Because structs are packed next to each other in memory, C# can also compare them with SIMD; Java's object array is an array of pointers, so it can't.
+`java-preview/vector/VectorRace.java` gives Java the same SIMD comparison as C#'s `equals.simd`.
+The Vector API can't read fields from an array of objects, so the data first has to be copied into a flat
+`long[]` (lo, hi, lo, hi, ...), which is exactly the layout a C# struct array already has.
 
-Numbers depend on the CPU, OS and runtime versions, so run it on your own machine.
-For publication-grade numbers, use [BenchmarkDotNet](https://benchmarkdotnet.org/) and [JMH](https://github.com/openjdk/jmh).
+PREVIEW_VECTOR_PLACEHOLDER
+
+### Value objects (Project Valhalla, early access)
+
+`java-preview/valhalla/ValhallaRace.java` declares the data as a `value record`. Value objects have no identity,
+so the JVM may store them inline in arrays the way C# stores structs. Early-access builds only guarantee that
+for small values; a nullable 16-byte value also needs a null marker, so check the memory footprint line to see
+whether this build actually flattened the array.
+
+This one needs the Valhalla early-access JDK, so it runs in the GitHub Actions **preview** job (or locally with `VALHALLA_HOME`).
+
+## Notes
+
+- **BenchmarkDotNet + .NET 11:** BenchmarkDotNet 0.15.8 (the latest release) doesn't recognise .NET 11 yet, so `StructSpeedTest.Benchmarks` runs in-process (`--inProcess`). Remove that once a release supports `net11.0`.
+- **NativeAOT and SIMD:** NativeAOT targets a baseline x64 CPU by default, which turns AVX2/AVX-512 off. `native.sh` passes `IlcInstructionSet=native` (and GraalVM gets `-march=native`) so both sides use the build machine's CPU.
+- **C# 15:** the project uses C# 15, but its new features (unions, closed hierarchies, labeled `break`/`continue`, extension indexers, collection expression arguments) are about expressiveness, not speed, so none of them are used here.
+- Numbers depend on CPU, OS and runtime versions. Run it on your own machine before drawing conclusions.

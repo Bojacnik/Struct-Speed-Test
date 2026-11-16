@@ -1,0 +1,146 @@
+name: Race
+
+# Runs the C# vs Java race on GitHub's machines, so every run uses the same hardware class.
+# Results: the job summary shows the tables; the "results-*" artifacts hold the raw CSVs.
+on:
+  push:
+    branches: [main, master, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Full run (all sizes, longer timing) instead of --quick"
+        type: boolean
+        default: false
+      standard-tools:
+        description: "Also run BenchmarkDotNet + JMH (slow, ~30 min)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "11.0.x"
+  JAVA_VERSION: "25"
+  # Valhalla early-access build: https://jdk.java.net/valhalla/ (update when a new build is published)
+  VALHALLA_URL: "https://download.java.net/java/early_access/valhalla/27/1/openjdk-27-jep401ea3+1-1_linux-x64_bin.tar.gz"
+
+jobs:
+  race:
+    name: Main race (JIT, stable features)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - name: Run race
+        env:
+          FULL: ${{ inputs.full }}
+        run: |
+          if [ "$FULL" = "true" ]; then ./race.sh; else ./race.sh --quick; fi
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "Runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)" >> "$GITHUB_STEP_SUMMARY"
+          cat results/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-main
+          path: results/
+
+  native:
+    name: Native race (NativeAOT vs GraalVM native-image)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: graalvm-community
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+      - name: Install NativeAOT prerequisites
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang zlib1g-dev
+      - name: Run native race
+        env:
+          FULL: ${{ inputs.full }}
+        run: |
+          if [ "$FULL" = "true" ]; then ./native.sh; else ./native.sh --quick; fi
+      - name: Publish summary
+        if: always()
+        run: cat results/summary-native.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-native
+          path: results/
+
+  preview:
+    name: Java preview features (not part of the main race)
+    runs-on: ubuntu-24.04
+    # Preview/early-access builds can break at any time; never fail the workflow because of them.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - name: Vector API (incubator)
+        run: ./preview.sh vector
+      - name: Download Valhalla early-access JDK
+        run: |
+          curl -sSfL "$VALHALLA_URL" -o valhalla.tar.gz
+          echo "$(curl -sSfL "$VALHALLA_URL.sha256")  valhalla.tar.gz" | sha256sum -c
+          mkdir -p "$RUNNER_TEMP/valhalla"
+          tar -xzf valhalla.tar.gz -C "$RUNNER_TEMP/valhalla" --strip-components=1
+      - name: Valhalla value objects (early access)
+        run: VALHALLA_HOME="$RUNNER_TEMP/valhalla" ./preview.sh valhalla
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "> **Preview only.** These use Java features that are not stable yet: the Vector API (incubator) and Valhalla value objects (early access)." >> "$GITHUB_STEP_SUMMARY"
+          python3 tools/compare.py results/java-*-preview.csv >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-preview
+          path: results/
+
+  standard-tools:
+    name: BenchmarkDotNet + JMH
+    if: github.event_name == 'workflow_dispatch' && inputs.standard-tools
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - run: ./bench.sh
+      - name: Publish summary
+        if: always()
+        run: |
+          for f in results/benchmarkdotnet/results/*-report-github.md; do cat "$f" >> "$GITHUB_STEP_SUMMARY"; done || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-standard-tools
+          path: results/

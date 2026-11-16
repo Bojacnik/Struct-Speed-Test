@@ -4,14 +4,14 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 
-namespace TestingSpeed;
+namespace StructSpeedTest;
 
 /// <summary>
 /// 16 bytes of data stored inline as two 64-bit fields.
 /// No heap allocation per instance: an array of Data is one contiguous block of memory.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
-public readonly struct Data : IEquatable<Data>
+public readonly struct Data : IEquatable<Data>, IComparable<Data>
 {
     public const int Size = 16;
 
@@ -24,6 +24,9 @@ public readonly struct Data : IEquatable<Data>
         _lo = lo;
         _hi = hi;
     }
+
+    public ulong Lo => _lo;
+    public ulong Hi => _hi;
 
     public Data(ReadOnlySpan<byte> bytes)
     {
@@ -93,7 +96,16 @@ public readonly struct Data : IEquatable<Data>
 
     public override bool Equals(object? obj) => obj is Data other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(_lo, _hi);
+    // Same cheap hash as the Java version (Long.hashCode(lo * 31 + hi)), so HashSet results compare like for like.
+    public override int GetHashCode()
+    {
+        var x = _lo * 31 + _hi;
+        return (int)(x ^ (x >> 32));
+    }
+
+    /// <summary>Unsigned ordering by the high half, then the low half (same order as the Java version).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(Data other) => _hi != other._hi ? _hi.CompareTo(other._hi) : _lo.CompareTo(other._lo);
 
     public override string ToString() => $"{_hi:x16}{_lo:x16}";
 
