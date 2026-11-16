@@ -9,7 +9,7 @@ Measures how fast C# structs are created and compared, raced against the equival
 
 ## Running
 
-Requires the .NET 10 SDK and JDK 21+.
+Requires the .NET 11 SDK (C# 15) and JDK 21+.
 
 ```bash
 ./race.sh            # 50,000 elements (default)
@@ -46,15 +46,15 @@ For each case, both programs:
 
 ## Sample results
 
-50,000 elements, 4-core x64 Linux cloud VM, .NET 10.0 vs OpenJDK 21. Median ns per element:
+50,000 elements, 4-core x64 Linux cloud VM, .NET 11.0 (C# 15) vs OpenJDK 21. Median ns per element:
 
 | Case | C# | Java |
 |---|---:|---:|
-| Create zeroed | **0.31** | 4.06 |
-| Create from PRNG (SplitMix64) | **1.50** | 3.69 |
-| Create from built-in GUID | 286.65 | **191.62** |
-| Create from crypto RNG (bulk) | **2.31** | 113.84 |
-| Equals: first vs all | 0.55–0.78* | 0.57 |
+| Create zeroed | **0.34** | 3.98 |
+| Create from PRNG (SplitMix64) | **1.43** | 3.27 |
+| Create from built-in GUID | 265.46 | **166.52** |
+| Create from crypto RNG (bulk) | **2.30** | 115.47 |
+| Equals: first vs all | 0.55–0.78* | 0.54 |
 | Equals: first vs all (SIMD) | **0.24** | n/a |
 
 \* The scalar loop moves between ~0.55 and ~0.78 ns depending on where the JIT places the machine code (loop alignment), not on the code itself.

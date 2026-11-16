@@ -12,7 +12,7 @@ javac -d java/out java/StructSpeedTest.java
 
 echo
 echo "== C# =="
-dotnet bin/Release/net10.0/TestingSpeed.dll "$COUNT"
+dotnet bin/Release/net11.0/TestingSpeed.dll "$COUNT"
 
 echo
 echo "== Java =="
