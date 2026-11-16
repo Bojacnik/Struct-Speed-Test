@@ -150,6 +150,28 @@ What stands out:
 
 **How noisy is this?** The same unchanged C# binary measured `create.zeroed` at 1M as anywhere from 0.60 to 1.15 ns across three launches on this cloud VM. Treat differences under about 30% as noise; for firmer numbers run `./bench.sh` (BenchmarkDotNet + JMH, several forks) on a quiet machine.
 
+### Hand-optimized track
+
+From the GitHub Actions **main** job (ubuntu-24.04 runner, quick mode), JIT, ns per element. The standard-library
+version of each case is shown for comparison:
+
+| Case | 1M C# | 1M Java | 10M C# | 10M Java |
+|---|---:|---:|---:|---:|
+| `sort` (standard library) | **65.34** | 186.04 | **79.25** | 273.01 |
+| `handopt.sort.radix` | **70.17** | 73.22 | **80.37** | 147.93 |
+| `hashset` (standard library) | 19.75 | **18.99** | **33.93** | 35.36 |
+| `handopt.hashset.open` | **14.83** | 16.75 | **23.93** | 27.32 |
+
+- **Radix sort helps Java a lot** (1.8–2.5× faster than `Arrays.sort`) **but not C#**, where it ties `Array.Sort`.
+  C#'s introsort on 16-byte structs is already cache-friendly, and the radix sort moves all 16 bytes of every element
+  8 times. Java's standard sort is slow because of pointer chasing, so radix sort's sequential passes help it more,
+  but Java still has to follow a reference to read each key.
+- **Radix sort has a fixed cost** of clearing and scanning 8 × 65,536 counters per call, so it only pays off for large
+  arrays (at 50k it's about 40–46 ns per element; at 1,000 elements it's hundreds).
+- **The open-addressing hash set beats the standard one in both languages** (about 1.1–1.4×). Both versions store the
+  16 bytes inline, so here the two languages are close; C# still wins at 1M and 10M.
+- These numbers are from a different machine than the main race above; compare within this table.
+
 ### Native race (ahead-of-time compiled)
 
 From the GitHub Actions **native** job (ubuntu-24.04 runner, quick mode), .NET 11 NativeAOT vs GraalVM Community 25.0.2 `native-image`, ns per element:
