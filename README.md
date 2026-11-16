@@ -87,29 +87,79 @@ Java runs twice in the main race (flags in `tools/env.sh`):
 
 ### Main race (JIT, stable features)
 
-_Being re-measured with compact object headers, the tuned-GC column and the new cases; numbers follow in the next commit._
+4-core x64 Linux cloud VM with AVX-512, .NET 11.0.0 vs OpenJDK 25.0.5 (compact object headers on). Median **ns per element**, fastest in bold. *Java tuned* is the extra column with the 4 GB young generation.
+
+**1M elements**
+
+| Case | C# | Java | Java tuned |
+|---|---:|---:|---:|
+| `create.zeroed` | **1.45** | 3.66 | 3.32 |
+| `create.prng` | **1.61** | 6.18 | 4.71 |
+| `create.guid` | 270.88 | 174.25 | **166.65** |
+| `create.crypto-bulk` | **3.09** | 37.26 | 36.93 |
+| `equals.scalar` | **1.14** | 1.36 | 1.25 |
+| `equals.simd` | 0.57 | – | – |
+| `sort` | **73.78** | 265.98 | 241.09 |
+| `hashset` | **35.94** | 41.73 | 39.82 |
+| `parallel.equals` | 0.57 | **0.45** | 0.48 |
+| `parallel.equals.simd` | 0.43 | – | – |
+| `parallel.create.prng` | **0.92** | 1.59 | 1.40 |
+
+**10M elements**
+
+| Case | C# | Java | Java tuned |
+|---|---:|---:|---:|
+| `create.zeroed` | **2.36** | 3.85 | 3.56 |
+| `create.prng` | **2.23** | 5.10 | 4.62 |
+| `create.guid` | 265.32 | 192.26 | **175.69** |
+| `create.crypto-bulk` | **4.18** | 36.20 | 37.39 |
+| `equals.scalar` | 2.72 | 1.99 | **1.94** |
+| `equals.simd` | 1.74 | – | – |
+| `sort` | **91.52** | 402.39 | 413.48 |
+| `hashset` | 57.88 | **55.78** | 73.46 |
+| `parallel.equals` | **0.64** | 0.84 | 0.95 |
+| `parallel.equals.simd` | 0.39 | – | – |
+| `parallel.create.prng` | **0.76** | 1.35 | 1.21 |
+
+The 50k results are in `results/summary.md` after a run: everything fits in the CPU cache there, and Java wins `equals.scalar` and `hashset` at that size.
+
+| | C# | Java |
+|---|---:|---:|
+| Memory per element | **16 bytes** | 28 bytes (36 without compact headers) |
+| Heap allocated per created element | **0 bytes** | 24 bytes |
+
+What stands out:
+
+- **Sort** is the clearest win: about 3.6× (1M) and 4.4× (10M) faster in C#. Java follows a reference for every comparison and no JVM setting changes that.
+- **Creating** values: C# writes 16 bytes into one flat block; Java allocates a 24-byte object per element. Compact headers and GC sizing brought Java much closer (10M `create.zeroed`: 15.9 ns before, 3.6–3.9 ns now), but C# still wins every creation case.
+- **Bulk crypto fill:** about 9–12× faster in C#, even after switching Java to the faster `DRBG` algorithm (114 → 36 ns). The C# array is raw memory, so one OS call fills it.
+- **SIMD across all cores** (`parallel.equals.simd`, C# only) is the fastest way to scan 10M elements: 0.39 ns, vs 1.74 ns for single-core SIMD, which can't read memory fast enough on its own.
+- **Java wins** the built-in GUID (`UUID.randomUUID()` buffers its randomness; .NET asks the OS once per GUID on Linux), `equals.scalar` at 10M, `parallel.equals` at 1M, and `hashset` at 10M by a small margin.
+- **Tuned GC:** a small gain at 1M, but at 10M it's mixed (`hashset` is slower: the huge young generation leaves less room for the long-lived set). In the full race the default Parallel GC already resizes its young generation after the first cases, so the effect is smaller than in a single-case test.
+
+**How noisy is this?** The same unchanged C# binary measured `create.zeroed` at 1M as anywhere from 0.60 to 1.15 ns across three launches on this cloud VM. Treat differences under about 30% as noise; for firmer numbers run `./bench.sh` (BenchmarkDotNet + JMH, several forks) on a quiet machine.
 
 ### Native race (ahead-of-time compiled)
 
-From the GitHub Actions **native** job (ubuntu-24.04 runner, quick mode), .NET 11 NativeAOT vs GraalVM Community 25.0.2 `native-image`, 1M elements, ns per element:
+From the GitHub Actions **native** job (ubuntu-24.04 runner, quick mode), .NET 11 NativeAOT vs GraalVM Community 25.0.2 `native-image`, ns per element:
 
-| Case | C# NativeAOT | Java native-image |
-|---|---:|---:|
-| `create.zeroed` | **0.55** | 3.84 |
-| `create.prng` | **1.91** | 3.93 |
-| `create.guid` | 324.11 | **279.54** |
-| `create.crypto-bulk` | **2.62** | 186.98 |
-| `equals.scalar` | **0.69** | 1.62 |
-| `equals.simd` | 0.54 | – |
-| `sort` | **106.01** | 276.67 |
-| `hashset` | **22.00** | 48.41 |
-| `parallel.equals` | **0.32** | 0.85 |
-| `parallel.create.prng` | **1.08** | 1.58 |
-| Memory per element | **16.0 bytes** | 48.4 bytes |
+| Case | 1M C# | 1M Java | 10M C# | 10M Java |
+|---|---:|---:|---:|---:|
+| `create.zeroed` | **0.37** | 2.84 | **0.70** | 69.85 |
+| `create.prng` | 7.35 | **4.28** | 7.31 | **4.40** |
+| `create.guid` | 521.99 | **359.34** | 522.04 | **432.07** |
+| `create.crypto-bulk` | **2.99** | 87.72 | **3.47** | 89.60 |
+| `equals.scalar` | **0.91** | 1.88 | **1.06** | 2.13 |
+| `equals.simd` | 0.40 | – | 0.79 | – |
+| `sort` | **118.98** | 350.07 | **140.35** | 551.43 |
+| `hashset` | **32.41** | 75.71 | **74.70** | 112.29 |
+| `parallel.equals` | **0.51** | 0.74 | **0.46** | 1.16 |
+| `parallel.equals.simd` | 0.23 | – | 0.38 | – |
+| `parallel.create.prng` | 3.23 | **2.15** | 2.77 | **2.45** |
+| Memory per element | **16.0 bytes** | 48.4 bytes | | |
 
-GraalVM Community's native images use the Serial GC and can't report allocations (they show as `n/a`). Oracle GraalVM adds G1 and profile-guided optimisation, which would narrow the gap.
-
-These come from a different machine than the main race, so compare within a table, not across tables.
+- GraalVM Community's native images use the Serial GC (hence 69.85 ns for `create.zeroed` at 10M: GC copies the objects) and can't report allocations. Compact object headers are a HotSpot feature, so they don't apply here. Oracle GraalVM adds G1 and profile-guided optimisation, which would narrow the gap.
+- **GitHub runners differ from run to run.** On the runner for this run, NativeAOT's `create.prng` took 7.3 ns; the same build takes 2.2 ns on the main-race VM, and an earlier CI run measured 1.9 ns. Compare numbers within one table, not across tables or runs.
 
 ## Preview: Java features that aren't stable yet
 
@@ -139,23 +189,23 @@ whether this build actually flattened the array.
 
 This one needs the Valhalla early-access JDK, so it runs in the GitHub Actions **preview** job (or locally with `VALHALLA_HOME`).
 
-Result with build `27-jep401ea3+1-1` (preview job, ns per element):
+Result with build `27-jep401ea3+1-1` (preview job, same JVM flags as the main race including compact headers, ns per element):
 
 | Case | 50k | 1M | 10M |
 |---|---:|---:|---:|
-| `create.zeroed` | 2.77 | 2.87 | 10.80 |
-| `create.prng` | 3.58 | 3.73 | 11.99 |
-| `equals.scalar` | 0.87 | 1.49 | 3.73 |
-| `sort` | 116.35 | 218.30 | 373.83 |
-| `hashset` | 10.38 | 31.28 | 104.04 |
+| `create.zeroed` | 2.08 | 2.02 | 2.35 |
+| `create.prng` | 3.28 | 3.34 | 3.41 |
+| `equals.scalar` | 0.58 | 1.34 | 1.91 |
+| `sort` | 113.14 | 197.20 | 351.08 |
+| `hashset` | 10.85 | 29.42 | 146.04 |
 
-| | Valhalla `value record` |
-|---|---:|
-| Heap allocated per created element | 40 bytes |
-| Memory per element | 44 bytes |
+| | Java `record` | Valhalla `value record` |
+|---|---:|---:|
+| Heap allocated per created element | 24 bytes | 32 bytes |
+| Memory per element | 28 bytes | 36 bytes |
 
-**This build did not flatten the array.** Every value was still allocated as its own heap object, and the footprint is
-higher than a normal record's 36 bytes. That matches the JEP 401 rules: a nullable 16-byte value needs a null marker and
+**This build did not flatten the array.** Every value was still allocated as its own heap object, and each one is
+8 bytes bigger than a normal record. That matches the JEP 401 rules: a nullable 16-byte value needs a null marker and
 atomic updates, which is more than the JVM can flatten today. Valhalla doesn't make Java struct-like for this data yet;
 re-run the preview job when a new early-access build comes out.
 
