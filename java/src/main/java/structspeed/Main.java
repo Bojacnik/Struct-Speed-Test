@@ -7,7 +7,7 @@ import java.util.function.LongSupplier;
 
 /**
  * Quick C# vs Java race. The C# counterpart is csharp/StructSpeedTest/Program.cs.
- * Usage: java -cp target/benchmarks.jar structspeed.Main [--sizes 50000,1000000,10000000] [--csv path] [--filter text] [--quick]
+ * Usage: java -cp target/benchmarks.jar structspeed.Main [--sizes 50000,1000000,10000000] [--csv path] [--filter text] [--quick] [--label text]
  */
 public final class Main {
     private static final int[] DEFAULT_SIZES = {50_000, 1_000_000, 10_000_000};
@@ -18,20 +18,23 @@ public final class Main {
         String csvPath = null;
         String filter = null;
         boolean quick = false;
+        String label = null;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--sizes" -> sizes = Arrays.stream(args[++i].split(",")).mapToInt(s -> Integer.parseInt(s.replace("_", ""))).toArray();
                 case "--csv" -> csvPath = args[++i];
                 case "--filter" -> filter = args[++i].toLowerCase(Locale.ROOT);
                 case "--quick" -> quick = true;
+                case "--label" -> label = args[++i];
                 default -> {
-                    System.err.println("Unknown argument '" + args[i] + "'. Usage: [--sizes a,b,c] [--csv path] [--filter text] [--quick]");
+                    System.err.println("Unknown argument '" + args[i] + "'. Usage: [--sizes a,b,c] [--csv path] [--filter text] [--quick] [--label text]");
                     System.exit(1);
                 }
             }
         }
 
-        String runtime = "Java " + Runtime.version().feature() + " (" + System.getProperty("java.vm.name") + ")";
+        String runtime = "Java " + Runtime.version().feature() + " (" + System.getProperty("java.vm.name") + ")"
+                + (label != null ? " " + label : "");
         System.out.printf("Java | %s | %s | %s | %d cores%n", Runtime.version(), System.getProperty("java.vm.name"),
                 System.getProperty("os.arch"), Runtime.getRuntime().availableProcessors());
 
@@ -53,7 +56,7 @@ public final class Main {
 
             Workloads.createRandom(data); // deterministic contents for the remaining cases
             run.accept("equals.scalar", () -> Workloads.countMatches(data));
-            // equals.simd: no stable Java API (the Vector API is incubating) - see java-preview/vector
+            // equals.simd / parallel.equals.simd: no stable Java SIMD API (the Vector API is incubating) - see java-preview/vector
             run.accept("sort", () -> Workloads.copyAndSort(data, sortWork));
             run.accept("hashset", () -> Workloads.buildHashSet(data));
             run.accept("parallel.equals", () -> Workloads.parallelCountMatches(data));

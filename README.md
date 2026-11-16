@@ -55,8 +55,16 @@ Both harnesses (`Harness.cs` / `Harness.java`) follow the same rules:
 4. Add every result into a printed checksum so the compiler can't remove the work.
 5. **Memory footprint:** fill a 1M-element array, force full GCs, and divide the heap growth by the element count.
 
-The JVM runs with `-XX:+UseParallelGC -Xms4g -Xmx4g` (see `tools/env.sh`). Parallel GC is a throughput collector,
-the closest match to the non-concurrent workstation GC the C# side uses.
+Java runs twice in the main race (flags in `tools/env.sh`):
+
+- **Java (default):** `-XX:+UseParallelGC -Xms4g -Xmx4g -XX:+UseCompactObjectHeaders`. Parallel GC is a throughput
+  collector, the closest match to the non-concurrent workstation GC the C# side uses. Compact object headers
+  ([JEP 519](https://openjdk.org/jeps/519)) are a stable feature since JDK 25, just not on by default: they shrink each
+  `Data` object from 32 to 24 bytes.
+- **Java (tuned GC):** the same, plus a 4 GB young generation (`-Xmn4g`). Most of Java's creation cost at large sizes is
+  the GC copying millions of objects that are still referenced from the array. A big young generation means the timed
+  rounds rarely trigger that copy. It mostly **postpones** the work rather than removing it (a long-running program pays it
+  eventually), which is why it's a separate column, not the default.
 
 ## Cases
 
@@ -65,12 +73,13 @@ the closest match to the non-concurrent workstation GC the C# side uses.
 | `create.zeroed` | Fill the array with `new Data(0, 0)` |
 | `create.prng` | Create each element from a fast random generator (SplitMix64, same algorithm in both) |
 | `create.guid` | One built-in random GUID per element (`Guid.NewGuid()` / `UUID.randomUUID()`) |
-| `create.crypto-bulk` | One call to the OS crypto RNG for all bytes, then turn them into elements |
+| `create.crypto-bulk` | One crypto-RNG call for all bytes, then turn them into elements. C#: `RandomNumberGenerator.Fill` (OS RNG). Java: `SecureRandom.getInstance("DRBG")`, 3.4× faster than the Linux default `NativePRNG`, which mixes every read with SHA1PRNG output |
 | `equals.scalar` | Compare element 0 with every element through `Equals` |
 | `equals.simd` | C#: `Data.CountMatches` compares 2 (AVX2) or 4 (AVX-512) elements per instruction. Java: no stable API, see preview |
-| `sort` | Copy the unsorted array, then sort it (unsigned order by high half, then low half) |
+| `sort` | Copy the unsorted array, then sort it (unsigned order by high half, then low half). C# compares the halves as one `UInt128` (10–14% faster); Java has no 128-bit integer, so it compares two `long`s |
 | `hashset` | Build a `HashSet` of all elements (both sides use the same hash function) |
 | `parallel.equals` | `equals.scalar` split over all cores (`Parallel.For` / parallel `IntStream`, same chunking) |
+| `parallel.equals.simd` | C# only: `equals.simd` split over all cores. At large sizes one core can't read memory fast enough to keep SIMD busy |
 | `parallel.create.prng` | `create.prng` split over all cores |
 | `memory.footprint` | Heap bytes per element of a filled array |
 
@@ -78,34 +87,7 @@ the closest match to the non-concurrent workstation GC the C# side uses.
 
 ### Main race (JIT, stable features)
 
-4-core x64 Linux cloud VM with AVX-512, .NET 11.0.0 vs OpenJDK 25.0.5. Median **ns per element, C# / Java**, faster in bold:
-
-| Case | 50k | 1M | 10M |
-|---|---:|---:|---:|
-| `create.zeroed` | **0.34** / 2.26 | **0.58** / 4.40 | **1.74** / 15.89 |
-| `create.prng` | **1.50** / 4.13 | **1.58** / 4.07 | **2.17** / 5.59 |
-| `create.guid` | 263.63 / **163.83** | 268.37 / **169.13** | 265.19 / **198.69** |
-| `create.crypto-bulk` | **2.31** / 114.18 | **3.05** / 115.29 | **3.74** / 131.04 |
-| `equals.scalar` | 0.77 / **0.54** | **1.35** / 2.04 | 2.34 / **2.29** |
-| `equals.simd` | 0.23 / – | 0.91 / – | 1.41 / – |
-| `sort` | **60.81** / 127.59 | **79.70** / 266.92 | **99.04** / 450.63 |
-| `hashset` | 19.70 / **16.02** | **29.51** / 40.63 | **52.83** / 70.21 |
-| `parallel.equals` | **0.46** / 0.76 | **0.62** / 0.65 | **0.61** / 1.20 |
-| `parallel.create.prng` | **0.91** / 2.57 | **0.87** / 1.46 | **0.67** / 8.36 |
-
-| | C# | Java |
-|---|---:|---:|
-| Memory per element | **16 bytes** | 36 bytes |
-| Heap allocated per created element | **0 bytes** | 32 bytes |
-
-What stands out:
-
-- **Creating** values: C# writes 16 bytes into one flat block; Java allocates a 32-byte object per element plus a 4-byte reference in the array. At 10M elements that's about 9× faster in C# (`create.zeroed`) and 12× faster in parallel.
-- **Memory:** 16 vs 36 bytes per element. A struct array has no per-element object header and no references.
-- **Sort:** 2–4.5× faster in C#, and the gap grows with size: Java has to follow a reference for every comparison, so cache misses pile up.
-- **Bulk random fill:** a struct array is raw memory, so one `RandomNumberGenerator.Fill` call fills it. Java has to allocate an object per element afterwards.
-- **Java still wins** the built-in GUID (`UUID.randomUUID()` buffers its random source; .NET asks the OS once per GUID on Linux) and, at 50k elements, `equals.scalar` and `hashset`, where everything fits in cache and HotSpot's code is excellent. At 10M, `equals.scalar` is a tie: both are limited by memory bandwidth.
-- `equals.simd` has no Java column because Java has no stable SIMD API; see the preview section.
+_Being re-measured with compact object headers, the tuned-GC column and the new cases; numbers follow in the next commit._
 
 ### Native race (ahead-of-time compiled)
 

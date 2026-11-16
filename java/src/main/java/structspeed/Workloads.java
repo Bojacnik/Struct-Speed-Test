@@ -19,9 +19,21 @@ public final class Workloads {
     /** Work is split into this many chunks per core in the parallel cases (same in C#). */
     public static final int CHUNKS_PER_CORE = 4;
 
-    private static final SecureRandom CRYPTO_RNG = new SecureRandom();
+    /**
+     * DRBG (NIST SP 800-90A) instead of the Linux default NativePRNG: both are cryptographically strong,
+     * but NativePRNG mixes every read with SHA1PRNG output and is about 3.4x slower for bulk fills.
+     */
+    private static final SecureRandom CRYPTO_RNG = createCryptoRng();
 
     private Workloads() {
+    }
+
+    private static SecureRandom createCryptoRng() {
+        try {
+            return SecureRandom.getInstance("DRBG");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return new SecureRandom();
+        }
     }
 
     // ---- creation -------------------------------------------------------------------------------

@@ -66,6 +66,22 @@ public static class Workloads
 
     // ---- parallel -------------------------------------------------------------------------------
 
+    /// <summary>SIMD comparison spread over all cores: at large sizes one core can't read memory fast enough.</summary>
+    public static long ParallelCountMatchesSimd(Data[] data)
+    {
+        var chunks = ChunkCount(data.Length);
+        var first = data[0];
+        long total = 0;
+        Parallel.For(0, chunks, () => 0L,
+            (chunk, _, local) =>
+            {
+                var (start, end) = ChunkRange(data.Length, chunks, chunk);
+                return local + Data.CountMatches(data.AsSpan(start, end - start), first);
+            },
+            local => Interlocked.Add(ref total, local));
+        return total;
+    }
+
     public static long ParallelCreateRandom(Data[] data)
     {
         var chunks = ChunkCount(data.Length);

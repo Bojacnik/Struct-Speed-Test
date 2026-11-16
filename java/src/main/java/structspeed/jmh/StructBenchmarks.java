@@ -25,7 +25,7 @@ import structspeed.Workloads;
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 5, time = 1)
-@Fork(value = 1, jvmArgsAppend = {"-XX:+UseParallelGC", "-Xms4g", "-Xmx4g"})
+@Fork(value = 1, jvmArgsAppend = {"-XX:+UseParallelGC", "-Xms4g", "-Xmx4g", "-XX:+UseCompactObjectHeaders"})
 public class StructBenchmarks {
 
     @Param({"50000", "1000000"})

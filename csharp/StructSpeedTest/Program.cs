@@ -60,6 +60,7 @@ internal static class Program
             Case("sort", () => Workloads.CopyAndSort(data, sortWork));
             Case("hashset", () => Workloads.BuildHashSet(data));
             Case("parallel.equals", () => Workloads.ParallelCountMatches(data));
+            Case("parallel.equals.simd", () => Workloads.ParallelCountMatchesSimd(data));
             Case("parallel.create.prng", () => Workloads.ParallelCreateRandom(data));
         }
 

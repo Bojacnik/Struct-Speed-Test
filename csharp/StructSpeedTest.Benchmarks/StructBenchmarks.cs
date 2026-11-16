@@ -35,5 +35,6 @@ public class StructBenchmarks
     [Benchmark] public long Sort() => Workloads.CopyAndSort(_random, _sortWork);
     [Benchmark] public long HashSet() => Workloads.BuildHashSet(_random);
     [Benchmark] public long ParallelEquals() => Workloads.ParallelCountMatches(_random);
+    [Benchmark] public long ParallelEqualsSimd() => Workloads.ParallelCountMatchesSimd(_random);
     [Benchmark] public long ParallelCreatePrng() => Workloads.ParallelCreateRandom(_data);
 }

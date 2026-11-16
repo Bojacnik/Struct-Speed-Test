@@ -17,7 +17,13 @@ case "${1:-}" in
   valhalla)
     : "${VALHALLA_HOME:?Set VALHALLA_HOME to a Valhalla early-access JDK (https://jdk.java.net/valhalla/)}"
     feature=$("$VALHALLA_HOME/bin/java" -XshowSettings:properties -version 2>&1 | awk '/java.specification.version/ {print $3}')
-    "$VALHALLA_HOME/bin/java" $JAVA_BENCH_OPTS --enable-preview --source "$feature" -cp java/target/benchmarks.jar \
+    opts="$JAVA_BENCH_OPTS"
+    # Early-access builds may not support every flag the main race uses: drop compact headers if rejected.
+    if ! "$VALHALLA_HOME/bin/java" $opts -version >/dev/null 2>&1; then
+      echo "This Valhalla build rejects one of: $opts - retrying without -XX:+UseCompactObjectHeaders"
+      opts="${opts/-XX:+UseCompactObjectHeaders/}"
+    fi
+    "$VALHALLA_HOME/bin/java" $opts --enable-preview --source "$feature" -cp java/target/benchmarks.jar \
       java-preview/valhalla/ValhallaRace.java results/java-valhalla-preview.csv
     ;;
   *)
