@@ -76,7 +76,58 @@ the closest match to the non-concurrent workstation GC the C# side uses.
 
 ## Results
 
-RESULTS_PLACEHOLDER
+### Main race (JIT, stable features)
+
+4-core x64 Linux cloud VM with AVX-512, .NET 11.0.0 vs OpenJDK 25.0.5. Median **ns per element, C# / Java**, faster in bold:
+
+| Case | 50k | 1M | 10M |
+|---|---:|---:|---:|
+| `create.zeroed` | **0.34** / 2.26 | **0.58** / 4.40 | **1.74** / 15.89 |
+| `create.prng` | **1.50** / 4.13 | **1.58** / 4.07 | **2.17** / 5.59 |
+| `create.guid` | 263.63 / **163.83** | 268.37 / **169.13** | 265.19 / **198.69** |
+| `create.crypto-bulk` | **2.31** / 114.18 | **3.05** / 115.29 | **3.74** / 131.04 |
+| `equals.scalar` | 0.77 / **0.54** | **1.35** / 2.04 | 2.34 / **2.29** |
+| `equals.simd` | 0.23 / – | 0.91 / – | 1.41 / – |
+| `sort` | **60.81** / 127.59 | **79.70** / 266.92 | **99.04** / 450.63 |
+| `hashset` | 19.70 / **16.02** | **29.51** / 40.63 | **52.83** / 70.21 |
+| `parallel.equals` | **0.46** / 0.76 | **0.62** / 0.65 | **0.61** / 1.20 |
+| `parallel.create.prng` | **0.91** / 2.57 | **0.87** / 1.46 | **0.67** / 8.36 |
+
+| | C# | Java |
+|---|---:|---:|
+| Memory per element | **16 bytes** | 36 bytes |
+| Heap allocated per created element | **0 bytes** | 32 bytes |
+
+What stands out:
+
+- **Creating** values: C# writes 16 bytes into one flat block; Java allocates a 32-byte object per element plus a 4-byte reference in the array. At 10M elements that's about 9× faster in C# (`create.zeroed`) and 12× faster in parallel.
+- **Memory:** 16 vs 36 bytes per element. A struct array has no per-element object header and no references.
+- **Sort:** 2–4.5× faster in C#, and the gap grows with size: Java has to follow a reference for every comparison, so cache misses pile up.
+- **Bulk random fill:** a struct array is raw memory, so one `RandomNumberGenerator.Fill` call fills it. Java has to allocate an object per element afterwards.
+- **Java still wins** the built-in GUID (`UUID.randomUUID()` buffers its random source; .NET asks the OS once per GUID on Linux) and, at 50k elements, `equals.scalar` and `hashset`, where everything fits in cache and HotSpot's code is excellent. At 10M, `equals.scalar` is a tie: both are limited by memory bandwidth.
+- `equals.simd` has no Java column because Java has no stable SIMD API; see the preview section.
+
+### Native race (ahead-of-time compiled)
+
+From the GitHub Actions **native** job (ubuntu-24.04 runner, quick mode), .NET 11 NativeAOT vs GraalVM Community 25.0.2 `native-image`, 1M elements, ns per element:
+
+| Case | C# NativeAOT | Java native-image |
+|---|---:|---:|
+| `create.zeroed` | **0.55** | 3.84 |
+| `create.prng` | **1.91** | 3.93 |
+| `create.guid` | 324.11 | **279.54** |
+| `create.crypto-bulk` | **2.62** | 186.98 |
+| `equals.scalar` | **0.69** | 1.62 |
+| `equals.simd` | 0.54 | – |
+| `sort` | **106.01** | 276.67 |
+| `hashset` | **22.00** | 48.41 |
+| `parallel.equals` | **0.32** | 0.85 |
+| `parallel.create.prng` | **1.08** | 1.58 |
+| Memory per element | **16.0 bytes** | 48.4 bytes |
+
+GraalVM Community's native images use the Serial GC and can't report allocations (they show as `n/a`). Oracle GraalVM adds G1 and profile-guided optimisation, which would narrow the gap.
+
+These come from a different machine than the main race, so compare within a table, not across tables.
 
 ## Preview: Java features that aren't stable yet
 
@@ -88,7 +139,14 @@ These are **not** part of the main race. They show where Java is heading, not wh
 The Vector API can't read fields from an array of objects, so the data first has to be copied into a flat
 `long[]` (lo, hi, lo, hi, ...), which is exactly the layout a C# struct array already has.
 
-PREVIEW_VECTOR_PLACEHOLDER
+From the GitHub Actions **preview** job (JDK 25.0.5, 512-bit vectors), ns per element:
+
+| Case | 50k | 1M | 10M |
+|---|---:|---:|---:|
+| Java `equals.scalar` on the flat `long[]` | 0.42 | 0.65 | 1.48 |
+| Java `equals.simd` (Vector API) | **0.19** | **0.59** | **1.09** |
+
+With the data flattened by hand, Java's SIMD is as fast as C#'s. The catch is that you have to give up objects to get there.
 
 ### Value objects (Project Valhalla, early access)
 
@@ -98,6 +156,26 @@ for small values; a nullable 16-byte value also needs a null marker, so check th
 whether this build actually flattened the array.
 
 This one needs the Valhalla early-access JDK, so it runs in the GitHub Actions **preview** job (or locally with `VALHALLA_HOME`).
+
+Result with build `27-jep401ea3+1-1` (preview job, ns per element):
+
+| Case | 50k | 1M | 10M |
+|---|---:|---:|---:|
+| `create.zeroed` | 2.77 | 2.87 | 10.80 |
+| `create.prng` | 3.58 | 3.73 | 11.99 |
+| `equals.scalar` | 0.87 | 1.49 | 3.73 |
+| `sort` | 116.35 | 218.30 | 373.83 |
+| `hashset` | 10.38 | 31.28 | 104.04 |
+
+| | Valhalla `value record` |
+|---|---:|
+| Heap allocated per created element | 40 bytes |
+| Memory per element | 44 bytes |
+
+**This build did not flatten the array.** Every value was still allocated as its own heap object, and the footprint is
+higher than a normal record's 36 bytes. That matches the JEP 401 rules: a nullable 16-byte value needs a null marker and
+atomic updates, which is more than the JVM can flatten today. Valhalla doesn't make Java struct-like for this data yet;
+re-run the preview job when a new early-access build comes out.
 
 ## Notes
 

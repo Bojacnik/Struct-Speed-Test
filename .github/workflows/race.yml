@@ -50,7 +50,7 @@ jobs:
         run: |
           echo "Runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)" >> "$GITHUB_STEP_SUMMARY"
           cat results/summary.md >> "$GITHUB_STEP_SUMMARY" || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: results-main
@@ -80,7 +80,7 @@ jobs:
       - name: Publish summary
         if: always()
         run: cat results/summary-native.md >> "$GITHUB_STEP_SUMMARY" || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: results-native
@@ -113,7 +113,7 @@ jobs:
         run: |
           echo "> **Preview only.** These use Java features that are not stable yet: the Vector API (incubator) and Valhalla value objects (early access)." >> "$GITHUB_STEP_SUMMARY"
           python3 tools/compare.py results/java-*-preview.csv >> "$GITHUB_STEP_SUMMARY" || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: results-preview
@@ -139,7 +139,7 @@ jobs:
         if: always()
         run: |
           for f in results/benchmarkdotnet/results/*-report-github.md; do cat "$f" >> "$GITHUB_STEP_SUMMARY"; done || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: results-standard-tools
